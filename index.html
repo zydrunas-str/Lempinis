@@ -246,6 +246,22 @@ input[type=range]{accent-color:var(--accent);width:100%;min-width:0}
 .gengine{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
 @media (max-width:640px){.gtrs{grid-template-columns:repeat(2,minmax(0,1fr))}.gtrs b{font-size:18px}}
 @media (prefers-reduced-motion:reduce){.pilot,.switch i,.switch i::after,.btn.ghost .chev{transition:none}}
+
+/* stage view: tab screen + transport fill the whole window */
+.stagebtns{display:flex;gap:6px;flex:none}
+.stagebtns .tbtn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+html.staged,html.staged body{overflow:hidden}
+.wrap.stage{position:fixed;inset:0;z-index:30;max-width:none;margin:0;gap:10px;background:var(--bg);
+  padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
+.wrap.stage > :not(.screen):not(.transport){display:none!important}
+.stage .screen{flex:1 1 auto;min-height:120px;touch-action:none}
+.stage #tab{position:absolute;inset:0;width:100%;height:100%}
+.stage #tab.rows{cursor:pointer}
+.stage .transport{flex:none}
+@media (min-width:900px){.stage .transport{flex-wrap:nowrap}.stage .tools{width:auto;flex:0 1 auto;flex-wrap:nowrap}.stage .speed{flex:0 1 190px}}
+@media (max-height:500px){.wrap.stage{gap:6px}.stage .transport{gap:8px}.stage .tbtn{width:38px;height:38px}.stage .tbtn.play{width:44px;height:44px}
+  .stage .transport{flex-wrap:nowrap}.stage .progress{flex:1 1 120px}.stage .tools{width:auto;flex:0 1 auto;flex-wrap:nowrap}
+  .stage .speed{flex:0 1 110px}.stage .speed .slbl{display:none}.stage .chip{padding:5px 10px}}
 </style>
 
 </head>
@@ -308,8 +324,12 @@ input[type=range]{accent-color:var(--accent);width:100%;min-width:0}
       <input type="range" id="seek" min="0" max="1000" value="0" aria-label="Pozicija dainoje">
       <span id="tTot">0:00</span>
     </div>
+    <div class="stagebtns">
+      <button class="tbtn" id="fsBtn" type="button" hidden aria-pressed="false" aria-label="Per visą ekraną" title="Per visą ekraną"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M2 4h20v14H2zM4 6v10h16V6zM8 20h8v2H8z"/></svg></button>
+      <button class="tbtn" id="stageBtn" type="button" aria-pressed="false" aria-label="Rodyti per visą langą" title="Rodyti per visą langą"><svg viewBox="0 0 24 24" id="stageIcon"><path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z"/></svg></button>
+    </div>
     <div class="tools">
-      <label class="speed" for="speed">Tempas
+      <label class="speed" for="speed"><span class="slbl">Tempas</span>
         <input type="range" id="speed" min="40" max="150" step="5" value="100">
         <output id="speedOut">100%</output>
       </label>
@@ -1852,10 +1872,14 @@ function readColors() {
   colors.mono = cs.getPropertyValue("--font-mono").trim();
 }
 function resize() {
-  const strings = song ? song.tracks[viewTrack].strings : 6;
-  const h = 46 + Math.max(4, strings) * 17;
-  cvs.style.height = h + "px";
-  dpr = window.devicePixelRatio || 1; W = cvs.clientWidth; H = h;
+  dpr = window.devicePixelRatio || 1;
+  if (stage) { cvs.style.height = ""; W = cvs.clientWidth; H = cvs.clientHeight; }
+  else {
+    const strings = song ? song.tracks[viewTrack].strings : 6;
+    const h = 46 + Math.max(4, strings) * 17;
+    cvs.style.height = h + "px";
+    W = cvs.clientWidth; H = h;
+  }
   cvs.width = Math.round(W * dpr); cvs.height = Math.round(H * dpr);
   draw();
 }
@@ -1866,7 +1890,11 @@ function draw() {
   g2.setTransform(dpr, 0, 0, dpr, 0, 0);
   g2.fillStyle = colors.screen; g2.fillRect(0, 0, W, H);
   if (!song) return;
+  if (stage) { const L = stageLayout(); setRowsMode(L.vis >= 2); if (L.vis >= 2) return drawRows(L); }
+  else setRowsMode(false);
   const tr = song.tracks[viewTrack], ns = tr.strings, top = 30, gap = 17;
+  const SH = 46 + Math.max(4, ns) * 17;
+  if (stage) g2.translate(0, Math.max(0, Math.round((H - SH) / 2)));
   const headX = Math.round(W * .26), k = ppt(), curTick = song.secToTick(curPos());
   const x0Tick = curTick - headX / k, x1Tick = curTick + (W - headX) / k, X = tick => headX + (tick - curTick) * k;
   g2.strokeStyle = colors["screen-line"]; g2.lineWidth = 1;
@@ -1903,12 +1931,111 @@ function draw() {
       }
     }
   }
-  g2.fillStyle = colors.screen; g2.fillRect(0, 0, 24, H);
+  g2.fillStyle = colors.screen; g2.fillRect(0, 0, 24, SH);
   g2.strokeStyle = colors["screen-line"]; g2.beginPath(); g2.moveTo(24.5, top - 6); g2.lineTo(24.5, top + (ns - 1) * gap + 6); g2.stroke();
   g2.font = "600 10px " + colors.mono; g2.fillStyle = colors["screen-dim"]; g2.textAlign = "left";
   for (let s = 0; s < ns; s++) g2.fillText(NOTE_NAMES[tr.tuning[s] % 12], 6, top + s * gap + .5);
-  g2.fillStyle = colors.accent; g2.globalAlpha = .9; g2.fillRect(headX - 1, 18, 2, H - 26); g2.globalAlpha = 1;
+  g2.fillStyle = colors.accent; g2.globalAlpha = .9; g2.fillRect(headX - 1, 18, 2, SH - 26); g2.globalAlpha = 1;
   g2.beginPath(); g2.moveTo(headX - 5, 16); g2.lineTo(headX + 5, 16); g2.lineTo(headX, 22); g2.fill();
+}
+
+/* ---- stage view: whole bars wrapped into rows, one under another, when at least two rows fit */
+let stage = false, layout = null, rowsMode = false, manualFirst = null, manualUntil = 0;
+const hintEl = document.querySelector(".screen .hint");
+function setRowsMode(on) {
+  if (on === rowsMode) return;
+  rowsMode = on; cvs.classList.toggle("rows", on);
+  hintEl.hidden = on;
+}
+function stageLayout() {
+  const ns = song.tracks[viewTrack].strings;
+  if (layout && layout.song === song && layout.W === W && layout.H === H && layout.track === viewTrack) return layout;
+  const s = clamp(Math.min(W / 760, H / 560), 1, 1.45);
+  const top = Math.round(23 * s), gap = 17 * s, rowH = top + (Math.max(4, ns) - 1) * gap + Math.round(11 * s);
+  const x0 = Math.round(30 * s), avail = W - x0 - Math.round(10 * s), k = ppt() * s;
+  const rows = []; let cur = null;
+  for (const b of song.bars) {
+    const w = (b.end - b.start) * k;
+    if (!cur || (cur.w + w > avail && cur.bars.length)) { cur = { bars: [], w: 0, start: b.start, end: b.end }; rows.push(cur); }
+    cur.bars.push(b); cur.w += w; cur.end = b.end;
+  }
+  rows.forEach((r, i) => { const fill = avail / Math.max(1, r.w); r.k = k * (i === rows.length - 1 && fill > 1.25 ? 1 : fill); });
+  const vis = Math.min(Math.floor(H / rowH), rows.length);
+  const pitch = vis > 0 ? Math.min(H / vis, rowH * 1.6) : rowH;
+  manualFirst = null;
+  layout = { song, W, H, track: viewTrack, s, top, gap, rowH, x0, rows, vis, pitch, first: 0, oy0: Math.max(0, (H - pitch * vis) / 2) };
+  return layout;
+}
+function rowIndexAt(rows, tick) { let lo = 0, hi = rows.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (rows[m].start <= tick) lo = m; else hi = m - 1; } return lo; }
+function drawRows(L) {
+  const tr = song.tracks[viewTrack], ns = tr.strings, s = L.s, top = L.top, gap = L.gap;
+  const curTick = song.secToTick(curPos()), cr = rowIndexAt(L.rows, curTick);
+  const maxF = Math.max(0, L.rows.length - L.vis), auto = Math.max(0, Math.min(cr, maxF));
+  if (manualFirst != null && playing && performance.now() > manualUntil) manualFirst = null;
+  const fF = manualFirst != null ? clamp(manualFirst, 0, maxF) : auto;
+  const first = Math.floor(fF), frac = fF - first; L.firstF = fF; L.first = first; L.frac = frac;
+  const beats = song.beatsByTrack[viewTrack];
+  const fNum = Math.round(10 * s), fNote = Math.round(12 * s), fAct = Math.round(13 * s), fSm = Math.round(9 * s);
+  for (let i = 0; i < L.vis + (frac > 0 ? 1 : 0) && first + i < L.rows.length; i++) {
+    const r = L.rows[first + i], oy = L.oy0 + (i - frac) * L.pitch + (L.pitch - L.rowH) / 2;
+    const X = t => L.x0 + (t - r.start) * r.k, xe = Math.round(X(r.end)) + .5, yBot = oy + top + (ns - 1) * gap;
+    g2.strokeStyle = colors["screen-line"]; g2.lineWidth = 1;
+    for (let st = 0; st < ns; st++) { const y = Math.round(oy + top + st * gap) + .5; g2.beginPath(); g2.moveTo(L.x0 - 6, y); g2.lineTo(xe, y); g2.stroke(); }
+    g2.font = "600 " + fNum + "px " + colors.mono; g2.fillStyle = colors["screen-dim"]; g2.textAlign = "left"; g2.textBaseline = "middle";
+    for (let st = 0; st < ns; st++) g2.fillText(NOTE_NAMES[tr.tuning[st] % 12], 6 * s, oy + top + st * gap + .5);
+    g2.font = "500 " + fNum + "px " + colors.mono;
+    for (const b of r.bars) {
+      const x = Math.round(X(b.start)) + .5;
+      g2.strokeStyle = colors["screen-dim"]; g2.beginPath(); g2.moveTo(x, oy + top); g2.lineTo(x, yBot); g2.stroke();
+      g2.fillStyle = colors["screen-dim"]; g2.fillText(String(b.index), x + 4, oy + top - 15 * s);
+    }
+    g2.strokeStyle = colors["screen-dim"]; g2.beginPath(); g2.moveTo(xe, oy + top); g2.lineTo(xe, yBot); g2.stroke();
+    let lo = 0, hi = beats.length; while (lo < hi) { const m = (lo + hi) >> 1; if (beats[m].tick < r.start) lo = m + 1; else hi = m; }
+    g2.textAlign = "center";
+    for (let j = lo; j < beats.length; j++) {
+      const b = beats[j]; if (b.tick >= r.end) break;
+      const x = X(b.tick), active = curTick >= b.tick && curTick < b.end, past = b.end <= curTick;
+      if (b.pm) { g2.fillStyle = colors["screen-dim"]; g2.font = "500 " + fSm + "px " + colors.mono; g2.fillText("P.M.", x, oy + top - 8 * s); }
+      for (const n of b.notes) {
+        const y = oy + top + (ns - n.s) * gap;
+        let txt = n.dead ? "x" : String(n.f);
+        if (n.harm) txt = "<" + txt + ">";
+        if (n.tie) txt = "(" + txt + ")";
+        g2.font = (active ? "600 " + fAct : "500 " + fNote) + "px " + colors.mono;
+        const w = g2.measureText(txt).width + 6 * s, h = 16 * s;
+        g2.fillStyle = active ? colors.accent : colors.screen; g2.fillRect(x - w / 2, y - h / 2, w, h);
+        g2.fillStyle = active ? colors.screen : (past ? colors["screen-dim"] : colors["screen-ink"]); g2.fillText(txt, x, y + .5);
+        if (n.bend) {
+          g2.strokeStyle = past ? colors["screen-dim"] : colors.accent; g2.lineWidth = 1.3 * s;
+          const bx = x + w / 2 + 1, q = 10 * s; g2.beginPath(); g2.moveTo(bx, y); g2.quadraticCurveTo(bx + q, y, bx + q, y - q); g2.stroke();
+          g2.beginPath(); g2.moveTo(bx + 7 * s, y - 7 * s); g2.lineTo(bx + q, y - 11 * s); g2.lineTo(bx + 13 * s, y - 7 * s); g2.stroke(); g2.lineWidth = 1;
+          g2.font = "500 " + fSm + "px " + colors.mono; g2.fillStyle = past ? colors["screen-dim"] : colors.accent;
+          const v = n.bend / 4; g2.fillText(v === 1 ? "full" : v === .5 ? "½" : v === 1.5 ? "1½" : v === 2 ? "2" : v === .25 ? "¼" : v.toString(), bx + 11 * s, y - 17 * s);
+        }
+      }
+    }
+    if (first + i === cr) {
+      const hx = Math.round(X(Math.min(curTick, r.end)));
+      g2.fillStyle = colors.accent; g2.globalAlpha = .9; g2.fillRect(hx - 1, oy + top - 10 * s, 2, (ns - 1) * gap + 18 * s); g2.globalAlpha = 1;
+      g2.beginPath(); g2.moveTo(hx - 5 * s, oy + top - 12 * s); g2.lineTo(hx + 5 * s, oy + top - 12 * s); g2.lineTo(hx, oy + top - 6 * s); g2.fill();
+    }
+  }
+}
+function setManual(f) {
+  const L = layout; if (!L) return;
+  manualFirst = clamp(f, 0, Math.max(0, L.rows.length - L.vis)); manualUntil = performance.now() + 4000; draw();
+}
+cvs.addEventListener("wheel", e => {
+  if (!rowsMode || !layout) return;
+  e.preventDefault();
+  const d = e.deltaY * (e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? layout.H : 1);
+  setManual((layout.firstF || 0) + d / layout.pitch);
+}, { passive: false });
+function rowsTickAt(clientX, clientY) {
+  const L = layout; if (!L) return null;
+  const rc = cvs.getBoundingClientRect(), i = Math.floor((clientY - rc.top - L.oy0) / L.pitch + (L.frac || 0)), r = L.rows[L.first + i];
+  if (i < 0 || !r) return null;
+  return clamp(r.start + (clientX - rc.left - L.x0) / r.k, r.start, r.end - 1);
 }
 let raf = 0;
 const pilot = $("pilot"), meterBuf = new Float32Array(512);
@@ -1937,14 +2064,21 @@ let drag = null;
 cvs.addEventListener("pointerdown", e => { if (!song) return; drag = { x: e.clientX, y: e.clientY, tick: song.secToTick(curPos()), moved: false, was: playing, id: e.pointerId }; });
 cvs.addEventListener("pointermove", e => {
   if (!drag || drag.id !== e.pointerId) return;
+  if (rowsMode) {
+    const dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dy) > 6 && Math.abs(dy) > Math.abs(e.clientX - drag.x)) { drag.moved = true; drag.vs = true; drag.f0 = layout ? layout.firstF || 0 : 0; cvs.setPointerCapture(e.pointerId); }
+    if (drag.vs && layout) { setManual(drag.f0 - dy / layout.pitch); e.preventDefault(); }
+    return;
+  }
   const dx = e.clientX - drag.x;
   if (!drag.moved && Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(e.clientY - drag.y)) { drag.moved = true; cvs.setPointerCapture(e.pointerId); cvs.classList.add("dragging"); if (playing) pause(); }
   if (drag.moved) { pos = clamp(song.tickToSec(drag.tick - dx / ppt()), 0, song.totalSec); draw(); updateTime(); e.preventDefault(); }
 });
 const endDrag = e => {
   if (!drag || drag.id !== e.pointerId) return;
-  if (!drag.moved && e.type === "pointerup") { const r = cvs.getBoundingClientRect(); seek(song.tickToSec(clamp(drag.tick + (e.clientX - r.left - W * .26) / ppt(), 0, song.totalTicks))); }
-  else if (drag.moved && drag.was) play();
+  if (!drag.moved && e.type === "pointerup" && rowsMode) { const t = rowsTickAt(e.clientX, e.clientY); if (t != null) { manualFirst = null; seek(song.tickToSec(t)); } }
+  else if (!drag.moved && e.type === "pointerup") { const r = cvs.getBoundingClientRect(); seek(song.tickToSec(clamp(drag.tick + (e.clientX - r.left - W * .26) / ppt(), 0, song.totalTicks))); }
+  else if (drag.moved && drag.was && !drag.vs) play();
   cvs.classList.remove("dragging"); drag = null;
 };
 cvs.addEventListener("pointerup", endDrag); cvs.addEventListener("pointercancel", endDrag);
@@ -2268,6 +2402,43 @@ seekEl.addEventListener("change", () => { seeking = false; if (song) seek(seekEl
 $("speed").addEventListener("input", e => { const v = +e.target.value; $("speedOut").textContent = v + "%"; setSpeed(v / 100); updateTime(); });
 $("metro").addEventListener("click", e => { metro = !metro; e.currentTarget.setAttribute("aria-pressed", String(metro)); if (playing) nextClick = idxAt(song.clicks, curPos()); });
 $("loop").addEventListener("click", e => { loopSong = !loopSong; e.currentTarget.setAttribute("aria-pressed", String(loopSong)); });
+/* stage view: full window, optional real full screen, screen kept awake */
+const appEl = $("app"), stageBtn = $("stageBtn"), fsBtn = $("fsBtn");
+const ICON_EXPAND = '<path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z"/>';
+const ICON_SHRINK = '<path d="M8 3h2v7H3V8h5zM14 3h2v5h5v2h-7zM3 14h7v7H8v-5H3zM14 14h7v2h-5v5h-2z"/>';
+const fsOK = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+let wake = null;
+async function lockWake() {
+  try { if (stage && !wake && navigator.wakeLock && document.visibilityState === "visible") { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch (e) {}
+}
+function exitFs() { try { const p = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+function setStage(on) {
+  if (on === stage) return;
+  stage = on; layout = null;
+  appEl.classList.toggle("stage", on); document.documentElement.classList.toggle("staged", on);
+  const lbl = on ? "Grįžti į įprastą vaizdą" : "Rodyti per visą langą";
+  stageBtn.setAttribute("aria-pressed", String(on)); stageBtn.setAttribute("aria-label", lbl); stageBtn.title = lbl;
+  $("stageIcon").innerHTML = on ? ICON_SHRINK : ICON_EXPAND;
+  fsBtn.hidden = !(on && fsOK);
+  if (on) { lockWake(); window.scrollTo(0, 0); }
+  else { if (fsEl()) exitFs(); if (wake) { wake.release().catch(() => {}); wake = null; } }
+  resize();
+}
+function syncFs() {
+  const on = !!fsEl(), lbl = on ? "Išeiti iš viso ekrano" : "Per visą ekraną";
+  fsBtn.setAttribute("aria-pressed", String(on)); fsBtn.setAttribute("aria-label", lbl); fsBtn.title = lbl;
+  layout = null; requestAnimationFrame(resize);
+}
+stageBtn.addEventListener("click", () => setStage(!stage));
+fsBtn.addEventListener("click", () => {
+  if (fsEl()) return exitFs();
+  const d = document.documentElement, req = d.requestFullscreen || d.webkitRequestFullscreen;
+  try { const p = req.call(d); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+});
+document.addEventListener("fullscreenchange", syncFs); document.addEventListener("webkitfullscreenchange", syncFs);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") lockWake(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && stage && !fsEl()) setStage(false); });
 document.addEventListener("keydown", e => {
   const a = document.activeElement;
   if (e.code === "Space" && !/INPUT|BUTTON|SELECT|TEXTAREA|CANVAS/.test(a.tagName) && !a.classList.contains("dial")) { e.preventDefault(); playing ? pause() : play(); }
