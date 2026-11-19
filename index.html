@@ -124,6 +124,10 @@ input[type=range]{accent-color:var(--accent);width:100%;min-width:0}
 .presets .now b{color:var(--ink);font-weight:600}
 .presets .mine{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .chip.armed{border-color:var(--accent);color:var(--accent)}
+#tab.grip{cursor:ew-resize;touch-action:none}
+#abLoop[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.screen.ab .hint{display:none}
+#abLoop .x{font-size:15px;line-height:1;margin-left:2px;opacity:.85}
 .chain{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;position:relative}
 .tile{position:relative;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 4px 6px 7px;text-align:left;cursor:pointer;
   display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"tn sw" "ts sw";column-gap:2px;align-items:center;min-width:0}
@@ -267,6 +271,9 @@ input[type=range]{accent-color:var(--accent);width:100%;min-width:0}
 .stagebtns .tbtn:hover{border-color:var(--accent);color:var(--accent)}
 .stagebtns .tbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .stagebtns .tbtn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.stagebtns #stageBtn{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.stagebtns #stageBtn[aria-pressed="true"]{background:var(--panel);border:2px solid var(--accent);color:var(--accent)}
+.stagebtns #stageBtn:hover{filter:brightness(1.08)}
 .stagebtns .tbtn.busy{opacity:.55;pointer-events:none}
 .sharebox{display:flex;gap:6px;align-items:center;margin-top:6px}.sharebox input{flex:1;min-width:0;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
 html.staged,html.staged body{overflow:hidden}
@@ -344,9 +351,9 @@ html.staged,html.staged body{overflow:hidden}
       <span id="tTot">0:00</span>
     </div>
     <div class="stagebtns">
-      <button class="tbtn" id="shareBtn" type="button" aria-label="Dalintis daina" title="Dalintis daina"><svg viewBox="0 0 24 24"><path d="M18 2a3 3 0 1 1-2.9 3.8L8.8 9.4a3 3 0 0 1 0 1.2l6.3 3.6A3 3 0 1 1 15 15.4L8.6 11.8a3 3 0 1 1 0-3.6L15 4.6A3 3 0 0 1 18 2z"/></svg></button>
-      <button class="tbtn" id="fsBtn" type="button" hidden aria-pressed="false" aria-label="Per visą ekraną" title="Per visą ekraną"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M2 4h20v14H2zM4 6v10h16V6zM8 20h8v2H8z"/></svg></button>
       <button class="tbtn" id="stageBtn" type="button" aria-pressed="false" aria-label="Rodyti per visą langą" title="Rodyti per visą langą"><svg viewBox="0 0 24 24" id="stageIcon"><path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z"/></svg></button>
+      <button class="tbtn" id="fsBtn" type="button" hidden aria-pressed="false" aria-label="Per visą ekraną" title="Per visą ekraną"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M2 4h20v14H2zM4 6v10h16V6zM8 20h8v2H8z"/></svg></button>
+      <button class="tbtn" id="shareBtn" type="button" aria-label="Dalintis daina" title="Dalintis daina"><svg viewBox="0 0 24 24"><path d="M18 2a3 3 0 1 1-2.9 3.8L8.8 9.4a3 3 0 0 1 0 1.2l6.3 3.6A3 3 0 1 1 15 15.4L8.6 11.8a3 3 0 1 1 0-3.6L15 4.6A3 3 0 0 1 18 2z"/></svg></button>
     </div>
     <div class="tools">
       <label class="speed" for="speed"><span class="slbl">Tempas</span>
@@ -354,7 +361,7 @@ html.staged,html.staged body{overflow:hidden}
         <output id="speedOut">100%</output>
       </label>
       <button class="chip" id="metro" aria-pressed="false">Metronomas</button>
-      <button class="chip" id="loop" aria-pressed="false">Kartoti</button>
+      <button class="chip" id="abLoop" type="button" aria-pressed="false" title="Kartoti dalį: tabe atsiras A ir B, kuriuos gali tempti">Loop</button>
     </div>
   </div>
 
@@ -1623,9 +1630,19 @@ function buildSong(score) {
 
 /* ================================================================== transport */
 let playing = false, pos = 0, speed = 1, anchorCtx = 0, anchorPos = 0, nextEv = 0, nextClick = 0, schedTimer = 0;
-let metro = false, loopSong = false;
+let metro = false, loopSong = true;   // the song always starts over at the end
+/* A–B loop: whole bars, la..lb are indexes into song.bars; lb = null while only the start is marked */
+let la = null, lb = null, wrapEnd = null;
+const abOn = () => song && la != null && lb != null;
+const abSecs = () => [song.tickToSec(song.bars[la].start), song.tickToSec(song.bars[lb].end)];
+function barIdx(tick) { const b = song.bars; let lo = 0, hi = b.length - 1; while (lo < hi) { const m = (lo + hi + 1) >> 1; if (b[m].start <= tick) lo = m; else hi = m - 1; } return lo; }
 const voices = new Set();
-function curPos() { return playing ? anchorPos + (ctx.currentTime - anchorCtx) * speed : pos; }
+const rawPos = () => anchorPos + (ctx.currentTime - anchorCtx) * speed;   // scheduler time; may run behind A right before a wrap
+function curPos() {
+  if (!playing) return pos;
+  const p = rawPos();
+  return wrapEnd != null && p < anchorPos ? wrapEnd - (anchorPos - p) : p;   // just before the loop wraps: still at the end of B
+}
 function idxAt(list, t) { let lo = 0, hi = list.length; while (lo < hi) { const m = (lo + hi) >> 1; if (list[m].t < t) lo = m + 1; else hi = m; } return lo; }
 
 function play() {
@@ -1645,6 +1662,8 @@ function play() {
     return;
   }
   if (pos >= song.totalSec - .05) pos = 0;
+  if (abOn()) { const [ls, le] = abSecs(); if (pos < ls - .001 || pos >= le - .05) pos = ls; }
+  wrapEnd = null;
   playing = true;
   anchorCtx = ctx.currentTime + .08; anchorPos = pos;
   nextEv = idxAt(song.events, pos - 1e-4); nextClick = idxAt(song.clicks, pos - 1e-4);
@@ -1653,7 +1672,7 @@ function play() {
 }
 function pause() {
   if (!playing) return;
-  pos = Math.max(0, curPos()); playing = false; clearInterval(schedTimer);
+  pos = Math.max(0, curPos()); playing = false; wrapEnd = null; clearInterval(schedTimer);
   const t = ctx.currentTime;
   for (const v of voices) { try { v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(0, t, .02); v.src.stop(t + .12); } catch (e) {} }
   voices.clear(); physPanic(); setPlayIcon(); draw();
@@ -1663,11 +1682,13 @@ function seek(p) {
   p = clamp(p, 0, song.totalSec);
   if (playing) { pause(); pos = p; play(); } else { pos = p; draw(); updateTime(); }
 }
-function setSpeed(s) { if (playing) { anchorPos = curPos(); anchorCtx = ctx.currentTime; } speed = s; if (S.slots.delay.sync) queueApply("delay"); }
+function setSpeed(s) { if (playing) anchorCtx = ctx.currentTime - (rawPos() - anchorPos) / s; speed = s; if (S.slots.delay.sync) queueApply("delay"); }
 function schedule() {
   if (!playing) return;
-  const ahead = .2, cp = curPos(), until = cp + ahead * speed, ev = song.events;
-  while (nextEv < ev.length && ev[nextEv].t < until) {
+  const ahead = .2, ev = song.events;
+  for (let pass = 0; pass < 2; pass++) {
+  const cp = rawPos(), until = cp + ahead * speed, lim = abOn() ? abSecs()[1] : Infinity;
+  while (nextEv < ev.length && ev[nextEv].t < until && ev[nextEv].t < lim) {
     const e = ev[nextEv++], r = routes[e.track];
     if (r === "off" || e.t < anchorPos - .02) continue;
     const when = Math.max(ctx.currentTime, anchorCtx + (e.t - anchorPos) / speed);
@@ -1677,7 +1698,7 @@ function schedule() {
   }
   if (metro) {
     const cl = song.clicks;
-    while (nextClick < cl.length && cl[nextClick].t < until) {
+    while (nextClick < cl.length && cl[nextClick].t < until && cl[nextClick].t < lim - .001) {
       const c = cl[nextClick++]; if (c.t < anchorPos - .02) continue;
       const when = Math.max(ctx.currentTime, anchorCtx + (c.t - anchorPos) / speed);
       const o = ctx.createOscillator(), g = gain(0); o.frequency.value = c.accent ? 1650 : 1100;
@@ -1685,9 +1706,18 @@ function schedule() {
       o.connect(g).connect(G.main); o.start(when); o.stop(when + .07);
     }
   } else nextClick = idxAt(song.clicks, cp);
+  if (until >= lim && anchorPos < lim) {
+    const [ls, le] = abSecs();
+    if (cp >= le) { anchorCtx = ctx.currentTime + .03; anchorPos = ls; wrapEnd = null; }
+    else { anchorCtx += (le - anchorPos) / speed; anchorPos = ls; wrapEnd = le; }
+    nextEv = idxAt(ev, ls - 1e-4); nextClick = idxAt(song.clicks, ls - 1e-4);
+    continue;
+  }
   if (cp >= song.totalSec + .3) {
     if (loopSong) { pause(); pos = 0; play(); }
     else { pause(); pos = song.totalSec; draw(); updateTime(); }
+  }
+  break;
   }
 }
 function pluck(e, when, dest, amp) {
@@ -1890,6 +1920,8 @@ function readColors() {
   const cs = getComputedStyle(document.documentElement);
   for (const k of ["screen", "screen-line", "screen-ink", "screen-dim", "accent", "ink", "muted", "line"]) colors[k] = cs.getPropertyValue("--" + k).trim();
   colors.mono = cs.getPropertyValue("--font-mono").trim();
+  const hex = c => { c = c.replace("#", ""); if (c.length === 3) c = c.replace(/./g, "$&$&"); return [0, 2, 4].map(i => parseInt(c.substr(i, 2), 16)); };
+  try { const a = hex(colors.screen), b = hex(colors.accent); colors.loopBg = "rgb(" + a.map((v, i) => Math.round(v + (b[i] - v) * .16)).join(",") + ")"; } catch (e) { colors.loopBg = colors.screen; }
 }
 function resize() {
   dpr = window.devicePixelRatio || 1;
@@ -1907,6 +1939,7 @@ const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", 
 function ppt() { return (W < 520 ? 62 : 84) / QUARTER; }
 function draw() {
   if (!W) return;
+  abHits = [];
   g2.setTransform(dpr, 0, 0, dpr, 0, 0);
   g2.fillStyle = colors.screen; g2.fillRect(0, 0, W, H);
   if (!song) return;
@@ -1917,6 +1950,7 @@ function draw() {
   if (stage) g2.translate(0, Math.max(0, Math.round((H - SH) / 2)));
   const headX = Math.round(W * .26), k = ppt(), curTick = song.secToTick(curPos());
   const x0Tick = curTick - headX / k, x1Tick = curTick + (W - headX) / k, X = tick => headX + (tick - curTick) * k;
+  drawAB(X, x0Tick, x1Tick, top, top + (ns - 1) * gap, 1, stage ? Math.max(0, Math.round((H - SH) / 2)) : 0);
   g2.strokeStyle = colors["screen-line"]; g2.lineWidth = 1;
   for (let s = 0; s < ns; s++) { const y = top + s * gap + .5; g2.beginPath(); g2.moveTo(0, y); g2.lineTo(W, y); g2.stroke(); }
   g2.font = "500 10px " + colors.mono; g2.textBaseline = "middle"; g2.textAlign = "left";
@@ -1940,7 +1974,7 @@ function draw() {
       if (n.tie) txt = "(" + txt + ")";
       g2.font = (active ? "600 13px " : "500 12px ") + colors.mono;
       const w = g2.measureText(txt).width + 6;
-      g2.fillStyle = active ? colors.accent : colors.screen; g2.fillRect(x - w / 2, y - 8, w, 16);
+      g2.fillStyle = active ? colors.accent : inAB(b.tick) ? colors.loopBg : colors.screen; g2.fillRect(x - w / 2, y - 8, w, 16);
       g2.fillStyle = active ? colors.screen : (past ? colors["screen-dim"] : colors["screen-ink"]); g2.fillText(txt, x, y + .5);
       if (n.bend) {
         g2.strokeStyle = past ? colors["screen-dim"] : colors.accent; g2.lineWidth = 1.3;
@@ -1957,6 +1991,34 @@ function draw() {
   for (let s = 0; s < ns; s++) g2.fillText(NOTE_NAMES[tr.tuning[s] % 12], 6, top + s * gap + .5);
   g2.fillStyle = colors.accent; g2.globalAlpha = .9; g2.fillRect(headX - 1, 18, 2, SH - 26); g2.globalAlpha = 1;
   g2.beginPath(); g2.moveTo(headX - 5, 16); g2.lineTo(headX + 5, 16); g2.lineTo(headX, 22); g2.fill();
+}
+
+/* Loop marks: tinted span with A and B handles under the strings; handles are dragged along whole bars. */
+let abHits = [];
+const inAB = t => abOn() && t >= song.bars[la].start && t < song.bars[lb].end;
+function drawAB(X, t0, t1, yTop, yBot, s, oy) {
+  if (!abOn()) return;
+  const a = song.bars[la].start, b = song.bars[lb].end;
+  const y0 = yTop - 9 * s, y1 = yBot + 7 * s, hw = Math.round(22 * s), hh = Math.round(18 * s);
+  g2.save();
+  if (b > t0 && a < t1) {
+    const xa = Math.round(X(Math.max(a, t0))), xb = Math.round(X(Math.min(b, t1)));
+    g2.fillStyle = colors.accent; g2.globalAlpha = .16; g2.fillRect(xa, y0, xb - xa, y1 - y0); g2.globalAlpha = 1;
+  }
+  const handle = (tick, which) => {
+    const x = Math.round(X(tick)), hot = abDrag && abDrag.which === which;
+    g2.fillStyle = colors.accent; g2.fillRect(x - (hot ? 1.5 : 1), y0, hot ? 3 : 2, y1 - y0);
+    const tx = which === "a" ? x - 1 : x - hw + 1;
+    g2.beginPath(); g2.roundRect ? g2.roundRect(tx, y1, hw, hh, 3 * s) : g2.rect(tx, y1, hw, hh); g2.fill();
+    g2.fillStyle = colors.screen; g2.font = "700 " + Math.round(12 * s) + "px " + colors.mono; g2.textAlign = "center"; g2.textBaseline = "middle";
+    g2.fillText(which === "a" ? "A" : "B", tx + hw / 2, y1 + hh / 2 + .5);
+    abHits.push({ which, x, tx, tw: hw, y0: y0 + oy, y1: y1 + hh + oy });
+  };
+  for (const which of ["a", "b"]) {
+    const tick = abDrag && abDrag.which === which && abDrag.tick != null ? abDrag.tick : which === "a" ? a : b;
+    if (which === "a" ? tick >= t0 && tick < t1 : tick > t0 && tick <= t1) handle(tick, which);
+  }
+  g2.restore();
 }
 
 /* ---- stage view: whole bars wrapped into rows, one under another, when at least two rows fit */
@@ -1999,6 +2061,7 @@ function drawRows(L) {
   for (let i = 0; i < L.vis + (frac > 0 ? 1 : 0) && first + i < L.rows.length; i++) {
     const r = L.rows[first + i], oy = L.oy0 + (i - frac) * L.pitch + (L.pitch - L.rowH) / 2;
     const X = t => L.x0 + (t - r.start) * r.k, xe = Math.round(X(r.end)) + .5, yBot = oy + top + (ns - 1) * gap;
+    drawAB(X, r.start, r.end, oy + top, yBot, s, 0);
     g2.strokeStyle = colors["screen-line"]; g2.lineWidth = 1;
     for (let st = 0; st < ns; st++) { const y = Math.round(oy + top + st * gap) + .5; g2.beginPath(); g2.moveTo(L.x0 - 6, y); g2.lineTo(xe, y); g2.stroke(); }
     g2.font = "600 " + fNum + "px " + colors.mono; g2.fillStyle = colors["screen-dim"]; g2.textAlign = "left"; g2.textBaseline = "middle";
@@ -2023,7 +2086,7 @@ function drawRows(L) {
         if (n.tie) txt = "(" + txt + ")";
         g2.font = (active ? "600 " + fAct : "500 " + fNote) + "px " + colors.mono;
         const w = g2.measureText(txt).width + 6 * s, h = 16 * s;
-        g2.fillStyle = active ? colors.accent : colors.screen; g2.fillRect(x - w / 2, y - h / 2, w, h);
+        g2.fillStyle = active ? colors.accent : inAB(b.tick) ? colors.loopBg : colors.screen; g2.fillRect(x - w / 2, y - h / 2, w, h);
         g2.fillStyle = active ? colors.screen : (past ? colors["screen-dim"] : colors["screen-ink"]); g2.fillText(txt, x, y + .5);
         if (n.bend) {
           g2.strokeStyle = past ? colors["screen-dim"] : colors.accent; g2.lineWidth = 1.3 * s;
@@ -2080,9 +2143,39 @@ function setPlayIcon() {
   $("playIcon").innerHTML = playing ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>' : '<path d="M7 4v16l13-8z"/>';
   $("play").setAttribute("aria-label", playing ? "Pauzė" : "Groti");
 }
-let drag = null;
-cvs.addEventListener("pointerdown", e => { if (!song) return; drag = { x: e.clientX, y: e.clientY, tick: song.secToTick(curPos()), moved: false, was: playing, id: e.pointerId }; });
+let drag = null, abDrag = null;
+function abHit(e) {
+  if (!abOn()) return null;
+  const r = cvs.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top, tol = e.pointerType === "mouse" ? 10 : 22;
+  let best = null, bd = 1e9;
+  for (const h of abHits) {
+    if (y < h.y0 - tol || y > h.y1 + tol) continue;
+    const d = x >= h.tx - 4 && x <= h.tx + h.tw + 4 && y >= h.y1 - 24 ? 0 : Math.abs(x - h.x);   // on the letter tag, or near the line
+    if (d <= tol && d < bd) { bd = d; best = h; }
+  }
+  return best;
+}
+function tickAtPointer(e) {
+  if (rowsMode) return rowsTickAt(e.clientX, e.clientY);
+  const r = cvs.getBoundingClientRect();
+  return song.secToTick(curPos()) + (e.clientX - r.left - Math.round(W * .26)) / ppt();
+}
+function moveHandle(which, tick) {
+  const bars = song.bars; if (tick == null) return;
+  tick = clamp(tick, 0, song.totalTicks); abDrag.tick = tick;
+  let i = barIdx(tick); const half = tick - bars[i].start > (bars[i].end - bars[i].start) / 2;
+  if (which === "a") { i = clamp(half ? i + 1 : i, 0, bars.length - 1); la = i; if (lb < la) lb = la; }
+  else { i = clamp(half ? i : i - 1, 0, bars.length - 1); lb = i; if (la > lb) la = lb; }
+  syncAB();
+}
+cvs.addEventListener("pointerdown", e => {
+  if (!song) return;
+  const h = abHit(e);
+  if (h) { abDrag = { which: h.which, id: e.pointerId, tick: null }; cvs.setPointerCapture(e.pointerId); cvs.classList.add("grip"); e.preventDefault(); draw(); return; }
+  drag = { x: e.clientX, y: e.clientY, tick: song.secToTick(curPos()), moved: false, was: playing, id: e.pointerId }; });
 cvs.addEventListener("pointermove", e => {
+  if (abDrag && abDrag.id === e.pointerId) { moveHandle(abDrag.which, tickAtPointer(e)); e.preventDefault(); return; }
+  if (!drag && e.pointerType === "mouse") cvs.classList.toggle("grip", !!abHit(e));
   if (!drag || drag.id !== e.pointerId) return;
   if (rowsMode) {
     const dy = e.clientY - drag.y;
@@ -2095,6 +2188,11 @@ cvs.addEventListener("pointermove", e => {
   if (drag.moved) { pos = clamp(song.tickToSec(drag.tick - dx / ppt()), 0, song.totalSec); draw(); updateTime(); e.preventDefault(); }
 });
 const endDrag = e => {
+  if (abDrag && abDrag.id === e.pointerId) {
+    abDrag = null; if (e.pointerType !== "mouse") cvs.classList.remove("grip"); draw();
+    if (playing && abOn()) { const [ls, le] = abSecs(), p = curPos(); if (p < ls - .001 || p >= le) seek(ls); }
+    return;
+  }
   if (!drag || drag.id !== e.pointerId) return;
   if (!drag.moved && e.type === "pointerup" && rowsMode) { const t = rowsTickAt(e.clientX, e.clientY); if (t != null) { manualFirst = null; seek(song.tickToSec(t)); } }
   else if (!drag.moved && e.type === "pointerup") { const r = cvs.getBoundingClientRect(); seek(song.tickToSec(clamp(drag.tick + (e.clientX - r.left - W * .26) / ppt(), 0, song.totalTicks))); }
@@ -2102,6 +2200,7 @@ const endDrag = e => {
   cvs.classList.remove("dragging"); drag = null;
 };
 cvs.addEventListener("pointerup", endDrag); cvs.addEventListener("pointercancel", endDrag);
+cvs.addEventListener("pointerleave", () => cvs.classList.remove("grip"));
 
 /* ================================================================== UI widgets */
 function knob(parent, label, get, set, fmtv, reset) {
@@ -2421,7 +2520,32 @@ seekEl.addEventListener("input", () => { if (!song) return; const p = seekEl.val
 seekEl.addEventListener("change", () => { seeking = false; if (song) seek(seekEl.value / 1000 * song.totalSec); });
 $("speed").addEventListener("input", e => { const v = +e.target.value; $("speedOut").textContent = v + "%"; setSpeed(v / 100); updateTime(); });
 $("metro").addEventListener("click", e => { metro = !metro; e.currentTarget.setAttribute("aria-pressed", String(metro)); if (playing) nextClick = idxAt(song.clicks, curPos()); });
-$("loop").addEventListener("click", e => { loopSong = !loopSong; e.currentTarget.setAttribute("aria-pressed", String(loopSong)); });
+const abBtn = $("abLoop");
+const abRange = () => { const A = song.bars[la].index, B = song.bars[lb].index, n = lb - la + 1;
+  return la === lb ? String(A) : A + "–" + B + (B - A + 1 === n ? "" : " · " + n + " takt."); };   // repeats make bar numbers come round again
+function syncAB() {
+  cvs.parentElement.classList.toggle("ab", abOn());
+  abBtn.setAttribute("aria-pressed", String(abOn()));
+  abBtn.textContent = abOn() ? "Loop " + abRange() : "Loop";
+  if (abOn()) { const x = el("span", "x", "×"); x.setAttribute("aria-hidden", "true"); abBtn.appendChild(x); }
+  abBtn.title = abOn() ? "Išjungti loop" : "Kartoti dalį: tabe atsiras A ir B, kuriuos gali tempti";
+  abBtn.setAttribute("aria-label", abOn() ? "Išjungti loop, taktai " + abRange() : "Įjungti loop");
+  draw();
+}
+function abNote(msg) { const st = $("status"); st.textContent = msg; setTimeout(() => { if (st.textContent === msg) st.textContent = ""; }, 5000); }
+function clearAB() { la = lb = null; wrapEnd = null; abDrag = null; syncAB(); }
+function setAB(a, b) {
+  la = a; lb = b; syncAB();
+  if (abOn()) { const [ls, le] = abSecs(), p = curPos(); if (p < ls - .001 || p >= le) seek(ls); }
+}
+abBtn.addEventListener("click", () => {
+  if (!song) return;
+  if (abOn()) { clearAB(); return; }
+  const bi = barIdx(song.secToTick(curPos()));
+  setAB(bi, Math.min(bi + (W < 520 ? 0 : 1), song.bars.length - 1));   // small enough that both handles are on screen
+  if (!playing) seek(abSecs()[0]);
+  abNote("Tempk A ir B tabe, kad pakeistum, kurią vietą kartoti.");
+});
 /* stage view: full window, optional real full screen, screen kept awake */
 const appEl = $("app"), stageBtn = $("stageBtn"), fsBtn = $("fsBtn");
 const ICON_EXPAND = '<path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z"/>';
@@ -2485,7 +2609,7 @@ function renderTracks() {
 /* loading */
 let curScore = null, curBytes = null, curName = "";
 function setSong(score, label) {
-  pause(); pos = 0; curScore = score;
+  pause(); pos = 0; curScore = score; la = lb = null;
   song = buildSong(score);
   const firstGtr = song.tracks.findIndex(t => t.kind === "guitar"), firstPitched = song.tracks.findIndex(t => !t.perc);
   const main = firstGtr >= 0 ? firstGtr : Math.max(0, firstPitched);
@@ -2495,7 +2619,7 @@ function setSong(score, label) {
   $("songArtist").textContent = [song.artist, song.album].filter(Boolean).join(" · ") || label || "";
   $("songMeta").innerHTML = "";
   [song.tempo + " BPM", song.bars.length + " taktai", fmt(song.totalSec), song.tracks.length + " takeliai"].forEach(m => $("songMeta").appendChild(el("span", null, m)));
-  renderTracks(); resize(); updateTime();
+  renderTracks(); resize(); updateTime(); syncAB();
   if (S.slots.delay.sync) queueApply("delay");
 }
 function loadBytes(bytes, name) {
@@ -2551,7 +2675,7 @@ function pack(head, body) {
   new DataView(out.buffer).setUint32(0, h.length); out.set(h, 4); out.set(body, 4 + h.length); return out;
 }
 async function makeShareLink() {
-  const head = { n: curName, rig: { S, name: presetName, dirty: presetDirty }, gt: GT, r: routes, vt: viewTrack, sp: +$("speed").value };
+  const head = { n: curName, rig: { S, name: presetName, dirty: presetDirty }, gt: GT, r: routes, vt: viewTrack, sp: +$("speed").value, ab: abOn() ? [la, lb] : null };
   const tries = [];
   if (curBytes) tries.push(b64u(await zip(pack(Object.assign({ k: "g" }, head), curBytes))));
   if (!tries.length || tries[0].length > 8000) {
@@ -2610,6 +2734,7 @@ async function openShared() {
     if (head.vt >= 0 && head.vt < song.tracks.length) viewTrack = head.vt;
     renderTracks(); resize();
     if (head.sp) { const sp = $("speed"); sp.value = head.sp; sp.dispatchEvent(new Event("input")); }
+    if (Array.isArray(head.ab) && song.bars[head.ab[0]] && song.bars[head.ab[1]] && head.ab[0] <= head.ab[1]) setAB(head.ab[0], head.ab[1]);
     shareNote("Daina atidaryta iš nuorodos su siuntėjo garsu. Spausk groti.");
   } catch (e) {
     $("status").textContent = "Nuorodos nepavyko atidaryti. Gal ji nukirpta? Paprašyk atsiųsti dar kartą.";
