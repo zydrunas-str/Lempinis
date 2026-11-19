@@ -7,6 +7,19 @@
 <meta name="theme-color" content="#dfe2dc" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131513" media="(prefers-color-scheme: dark)">
 <title>Lempinis</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lempinis">
+<meta property="og:locale" content="lt_LT">
+<meta property="og:title" content="Lempinis · Guitar Pro tabų grotuvas">
+<meta property="og:description" content="Atidaryk ir spausk groti: daina skamba su gitara, stiprintuvu ir pedalais tiesiai naršyklėje.">
+<meta property="og:image" content="https://zydrunas-str.github.io/Lempinis/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Lempinis: oranžinė lemputė ir tabulatūra tamsiame ekrane">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lempinis · Guitar Pro tabų grotuvas">
+<meta name="twitter:description" content="Atidaryk ir spausk groti: daina skamba su gitara, stiprintuvu ir pedalais tiesiai naršyklėje.">
+<meta name="twitter:image" content="https://zydrunas-str.github.io/Lempinis/og.png">
 <style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -249,7 +262,13 @@ input[type=range]{accent-color:var(--accent);width:100%;min-width:0}
 
 /* stage view: tab screen + transport fill the whole window */
 .stagebtns{display:flex;gap:6px;flex:none}
+.stagebtns .tbtn{border:2px solid var(--ink);color:var(--ink);background:var(--panel)}
+.stagebtns .tbtn svg{width:20px;height:20px}
+.stagebtns .tbtn:hover{border-color:var(--accent);color:var(--accent)}
+.stagebtns .tbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .stagebtns .tbtn[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.stagebtns .tbtn.busy{opacity:.55;pointer-events:none}
+.sharebox{display:flex;gap:6px;align-items:center;margin-top:6px}.sharebox input{flex:1;min-width:0;font:inherit;font-size:12px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
 html.staged,html.staged body{overflow:hidden}
 .wrap.stage{position:fixed;inset:0;z-index:30;max-width:none;margin:0;gap:10px;background:var(--bg);
   padding:max(10px,env(safe-area-inset-top,0px)) max(12px,env(safe-area-inset-right,0px)) max(10px,env(safe-area-inset-bottom,0px)) max(12px,env(safe-area-inset-left,0px))}
@@ -325,6 +344,7 @@ html.staged,html.staged body{overflow:hidden}
       <span id="tTot">0:00</span>
     </div>
     <div class="stagebtns">
+      <button class="tbtn" id="shareBtn" type="button" aria-label="Dalintis daina" title="Dalintis daina"><svg viewBox="0 0 24 24"><path d="M18 2a3 3 0 1 1-2.9 3.8L8.8 9.4a3 3 0 0 1 0 1.2l6.3 3.6A3 3 0 1 1 15 15.4L8.6 11.8a3 3 0 1 1 0-3.6L15 4.6A3 3 0 0 1 18 2z"/></svg></button>
       <button class="tbtn" id="fsBtn" type="button" hidden aria-pressed="false" aria-label="Per visą ekraną" title="Per visą ekraną"><svg viewBox="0 0 24 24"><path fill-rule="evenodd" d="M2 4h20v14H2zM4 6v10h16V6zM8 20h8v2H8z"/></svg></button>
       <button class="tbtn" id="stageBtn" type="button" aria-pressed="false" aria-label="Rodyti per visą langą" title="Rodyti per visą langą"><svg viewBox="0 0 24 24" id="stageIcon"><path d="M3 3h7v2H5v5H3zM14 3h7v7h-2V5h-5zM3 14h2v5h5v2H3zM19 14h2v7h-7v-2h5z"/></svg></button>
     </div>
@@ -2463,8 +2483,9 @@ function renderTracks() {
 }
 
 /* loading */
+let curScore = null, curBytes = null, curName = "";
 function setSong(score, label) {
-  pause(); pos = 0;
+  pause(); pos = 0; curScore = score;
   song = buildSong(score);
   const firstGtr = song.tracks.findIndex(t => t.kind === "guitar"), firstPitched = song.tracks.findIndex(t => !t.perc);
   const main = firstGtr >= 0 ? firstGtr : Math.max(0, firstPitched);
@@ -2478,14 +2499,14 @@ function setSong(score, label) {
   if (S.slots.delay.sync) queueApply("delay");
 }
 function loadBytes(bytes, name) {
-  try { setSong(alphaTab.importer.ScoreLoader.loadScoreFromBytes(bytes, new alphaTab.Settings()), name); $("status").textContent = ""; }
-  catch (e) { $("status").textContent = "Nepavyko atidaryti „" + name + "“. Tinka Guitar Pro 3–8 (.gp3, .gp4, .gp5, .gpx, .gp) ir MusicXML failai."; }
+  try { setSong(alphaTab.importer.ScoreLoader.loadScoreFromBytes(bytes, new alphaTab.Settings()), name); curBytes = bytes; curName = name; $("status").textContent = ""; return true; }
+  catch (e) { $("status").textContent = "Nepavyko atidaryti „" + name + "“. Tinka Guitar Pro 3–8 (.gp3, .gp4, .gp5, .gpx, .gp) ir MusicXML failai."; return false; }
 }
 function openFile(f) {
   if (!f) return;
   $("status").textContent = "Atidaroma: " + f.name + "…";
   const r = new FileReader();
-  r.onload = () => loadBytes(new Uint8Array(r.result), f.name);
+  r.onload = () => { if (loadBytes(new Uint8Array(r.result), f.name)) dropShareHash(); };
   r.onerror = () => { $("status").textContent = "Failo nepavyko perskaityti. Pabandykite dar kartą."; };
   r.readAsArrayBuffer(f);
 }
@@ -2514,6 +2535,87 @@ const DEMO = String.raw`\title "Vakaro arpedžas"
 \ro :4 0.3 0.3 0.3 3.3 | 1.4 1.4 1.4 1.4 | 3.3 3.3 3.3 3.3 | \rc 2 3.4 3.4 3.4 3.4 |
 0.3 0.3 0.3 0.3 | 1.4 1.4 1.4 1.4 | 0.4 0.4 0.4 0.4 | 0.3.1 |`;
 
+/* ---- sharing: the whole song plus the current sound travel inside the link (#lp1.…), no server needed.
+   Payload = [4 bytes header length][header JSON][song]; deflate-raw, base64url. Song is the original file
+   when that stays short (lossless), otherwise alphaTex text, which compresses ~10–20× better and plays the same. */
+const SHARE_PREFIX = "#lp1.", SHARE_BASE = "https://zydrunas-str.github.io/Lempinis/";
+const shareBase = () => /\.github\.io$/i.test(location.hostname) ? location.origin + location.pathname : SHARE_BASE;
+async function zip(bytes, inflate) {
+  const cs = inflate ? new DecompressionStream("deflate-raw") : new CompressionStream("deflate-raw");
+  return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(cs)).arrayBuffer());
+}
+function b64u(u8) { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
+function unb64u(t) { const s = atob(t.replace(/-/g, "+").replace(/_/g, "/")); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u; }
+function pack(head, body) {
+  const h = new TextEncoder().encode(JSON.stringify(head)), out = new Uint8Array(4 + h.length + body.length);
+  new DataView(out.buffer).setUint32(0, h.length); out.set(h, 4); out.set(body, 4 + h.length); return out;
+}
+async function makeShareLink() {
+  const head = { n: curName, rig: { S, name: presetName, dirty: presetDirty }, gt: GT, r: routes, vt: viewTrack, sp: +$("speed").value };
+  const tries = [];
+  if (curBytes) tries.push(b64u(await zip(pack(Object.assign({ k: "g" }, head), curBytes))));
+  if (!tries.length || tries[0].length > 8000) {
+    try {
+      const tex = new alphaTab.exporter.AlphaTexExporter().exportToString(curScore, new alphaTab.Settings());
+      alphaTab.importer.ScoreLoader.loadAlphaTex(tex, new alphaTab.Settings());   // must read back
+      tries.push(b64u(await zip(pack(Object.assign({ k: "t" }, head), new TextEncoder().encode(tex)))));
+    } catch (e) {}
+  }
+  if (!tries.length) throw new Error("export");
+  return shareBase() + SHARE_PREFIX + tries.reduce((a, b) => b.length < a.length ? b : a);
+}
+function shareNote(msg, url) {
+  const st = $("status"); st.textContent = msg;
+  if (url) {
+    const box = el("div", "sharebox"), inp = el("input"); inp.readOnly = true; inp.value = url; inp.setAttribute("aria-label", "Dalinimosi nuoroda");
+    inp.addEventListener("focus", () => inp.select()); box.appendChild(inp); st.appendChild(box); inp.focus();
+  } else setTimeout(() => { if (st.textContent === msg) st.textContent = ""; }, 4000);
+}
+const shareBtn = $("shareBtn");
+shareBtn.addEventListener("click", async () => {
+  if (!curScore) return;
+  shareBtn.classList.add("busy");
+  let url;
+  try { url = await makeShareLink(); }
+  catch (e) { shareBtn.classList.remove("busy"); return shareNote("Šios dainos nepavyko supakuoti į nuorodą."); }
+  shareBtn.classList.remove("busy");
+  const long = url.length > 30000 ? " Nuoroda ilga, kai kurios programėlės gali ją nukirpti." : "";
+  const song = $("songTitle").textContent || curName, title = "Lempinis · " + song;
+  if (navigator.share && matchMedia("(pointer:coarse)").matches) {
+    try { await navigator.share({ title, text: song + " · klausyk Lempinyje", url }); if (long) shareNote(long.trim()); return; }
+    catch (e) { if (e && e.name === "AbortError") return; }
+  }
+  try { await navigator.clipboard.writeText(url); shareNote("Nuoroda nukopijuota. Joje yra visa daina ir tavo garsas." + long); }
+  catch (e) { shareNote("Nukopijuok šią nuorodą:" + long, url); }
+});
+function dropShareHash() { if (location.hash.startsWith(SHARE_PREFIX)) history.replaceState(null, "", location.pathname + location.search); }
+let sharedOpened = "";
+async function openShared() {
+  const h = location.hash;
+  if (!h.startsWith(SHARE_PREFIX) || h === sharedOpened || !window.alphaTab) return;
+  sharedOpened = h;
+  $("status").textContent = "Atidaroma daina iš nuorodos…";
+  try {
+    const raw = await zip(unb64u(h.slice(SHARE_PREFIX.length)), true);
+    const hl = new DataView(raw.buffer).getUint32(0), head = JSON.parse(new TextDecoder().decode(raw.subarray(4, 4 + hl))), body = raw.subarray(4 + hl);
+    const name = head.n || "Daina iš nuorodos";
+    if (head.k === "g") { if (!loadBytes(body, name)) return; }
+    else { setSong(alphaTab.importer.ScoreLoader.loadAlphaTex(new TextDecoder().decode(body), new alphaTab.Settings()), name); curBytes = null; curName = name; }
+    if (head.rig && head.rig.S) { loadState(head.rig.S, head.rig.name || ""); presetDirty = !!head.rig.dirty; syncPresetUI(); save(); }
+    if (head.gt && GTRS[head.gt.model]) {
+      const m = head.gt.model; Object.assign(GT, head.gt, { model: GT.model, thru: Object.assign({}, GT.thru, head.gt.thru) });
+      if (m !== GT.model) setGuitar(m); else { physBroadcast(); saveGT(); renderGtr(); }
+    }
+    if (Array.isArray(head.r) && head.r.length === routes.length) routes = head.r.slice();
+    if (head.vt >= 0 && head.vt < song.tracks.length) viewTrack = head.vt;
+    renderTracks(); resize();
+    if (head.sp) { const sp = $("speed"); sp.value = head.sp; sp.dispatchEvent(new Event("input")); }
+    shareNote("Daina atidaryta iš nuorodos su siuntėjo garsu. Spausk groti.");
+  } catch (e) {
+    $("status").textContent = "Nuorodos nepavyko atidaryti. Gal ji nukirpta? Paprašyk atsiųsti dar kartą.";
+  }
+}
+
 function themeRefresh() { readColors(); draw(); const eq = editorEl.querySelector(".eqbox"); if (eq && eq.repaint) eq.repaint(); }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", themeRefresh);
 new MutationObserver(themeRefresh).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
@@ -2526,8 +2628,10 @@ if (!window.alphaTab) {
   $("songTitle").textContent = "Nepavyko įkelti GP skaitytuvo";
   $("status").textContent = "Biblioteka GP failams skaityti neįsikrovė. Perkraukite puslapį.";
 } else {
-  try { setSong(alphaTab.importer.ScoreLoader.loadAlphaTex(DEMO, new alphaTab.Settings()), "Pavyzdys"); }
+  try { setSong(alphaTab.importer.ScoreLoader.loadAlphaTex(DEMO, new alphaTab.Settings()), "Pavyzdys"); curBytes = null; curName = "Pavyzdys"; }
   catch (e) { $("songTitle").textContent = "Atidarykite GP failą"; }
+  openShared();
+  window.addEventListener("hashchange", openShared);
 }
 })();
 </script>
